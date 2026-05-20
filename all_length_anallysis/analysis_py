@@ -1,0 +1,92 @@
+import pandas as pd
+import numpy as np
+
+# =====================================================================
+# 第一部分：严谨的数据读取与集合映射
+# =====================================================================
+print("⏳ 1/3 正在跨尺度加载孤岛序列索引...")
+
+# 请根据你的实际文件名进行修改
+files = {
+    '21bp': '21bp_Final_Feature_Matrix_for_ML.csv',
+    '51bp': '51bp_Final_Feature_Matrix_for_ML.csv',
+    '101bp': '101bp_Final_Feature_Matrix_for_ML.csv'
+}
+
+cluster0_sets = {}
+
+for scale, filepath in files.items():
+    try:
+        df = pd.read_csv(filepath)
+        
+        # 严谨性防线：检查是否存在明确的原始索引列
+        if 'Original_Row_Index' in df.columns:
+            indices = set(df[df['Cluster_ID'] == 0]['Original_Row_Index'].astype(int).values)
+        else:
+            # 如果没有保留 Original_Row_Index，则默认数据集行顺序绝对一致，使用隐式索引
+            print(f"⚠️ 警告: {scale} 数据缺失 'Original_Row_Index' 列，默认使用 DataFrame 行号映射。")
+            indices = set(df.index[df['Cluster_ID'] == 0].tolist())
+            
+        cluster0_sets[scale] = indices
+        print(f"   ✅ {scale} 模型 Cluster 0 捕获序列数: {len(indices)}")
+        
+    except FileNotFoundError:
+        print(f"❌ 错误: 找不到文件 {filepath}，请检查路径！")
+        exit()
+
+# =====================================================================
+# 第二部分：核心数学计算 (Intersection & Jaccard Index)
+# =====================================================================
+print("\n🧮 2/3 正在执行多维度雅卡尔相似度 (Jaccard Similarity) 分析...")
+
+set_21 = cluster0_sets['21bp']
+set_51 = cluster0_sets['51bp']
+set_101 = cluster0_sets['101bp']
+
+def calculate_jaccard(set_a, set_b):
+    """计算两个集合的 Jaccard 指数"""
+    intersection = len(set_a.intersection(set_b))
+    union = len(set_a.union(set_b))
+    return intersection / union if union != 0 else 0
+
+def calculate_overlap_coefficient(set_a, set_b):
+    """计算 Szymkiewicz-Simpson 重叠系数 (对大小差异悬殊的集合更宽容)"""
+    intersection = len(set_a.intersection(set_b))
+    min_len = min(len(set_a), len(set_b))
+    return intersection / min_len if min_len != 0 else 0
+
+# 1. 两两比对 (Pairwise Comparisons)
+jaccard_21_51 = calculate_jaccard(set_21, set_51)
+jaccard_51_101 = calculate_jaccard(set_51, set_101)
+jaccard_21_101 = calculate_jaccard(set_21, set_101)
+
+overlap_21_101 = calculate_overlap_coefficient(set_21, set_101)
+
+# 2. 三维绝对交集 (Global Intersection)
+intersection_all = set_21.intersection(set_51).intersection(set_101)
+union_all = set_21.union(set_51).union(set_101)
+jaccard_all = len(intersection_all) / len(union_all)
+
+# =====================================================================
+# 第三部分：生成出版物级别的统计报告
+# =====================================================================
+print("\n📊 3/3 跨尺度序列重叠度检验报告 (Cross-scale Overlap Report):")
+print("-" * 60)
+print(f"🔹 绝对核心群体 (三尺度共同包含的序列数): {len(intersection_all)}")
+print(f"🔹 全局雅卡尔指数 (Global Jaccard): {jaccard_all:.4f}")
+print("-" * 60)
+print("🔹 两两比对相似度 (Pairwise Jaccard Index):")
+print(f"   - 21bp vs 51bp:  {jaccard_21_51:.4f}")
+print(f"   - 51bp vs 101bp: {jaccard_51_101:.4f}")
+print(f"   - 21bp vs 101bp: {jaccard_21_101:.4f}")
+print("-" * 60)
+print(f"🔹 跨越极大尺度的重叠系数 (Overlap Coefficient 21bp vs 101bp): {overlap_21_101:.4f}")
+print("-" * 60)
+
+# 大牛的自动化生物学推断
+if overlap_21_101 > 0.7:
+    print("\n🎉 专家结论: 重叠度极高！这证明你在不同尺度下抓取的孤岛是【同一个生物学实体】的稳固投影。多尺度秩次迁移图完全合法且意义重大！")
+elif overlap_21_101 > 0.4:
+    print("\n💡 专家结论: 存在显著重叠。核心群体依然一致，差异部分可能代表长序列模型对短序列假阳性边缘的【边界提纯】。")
+else:
+    print("\n⚠️ 专家警告: 重叠度过低！它们在物理层面上不是同一群序列，请立刻停止多尺度特征对比，需重新审视聚类参数。")
